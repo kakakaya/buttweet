@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding:utf-8 -*-
 # Author: kakakaya, Date: Sun Jan 22 20:54:27 2017
-from pprint import pprint as p
+import time
 import tweepy
 import sys
 import datetime
@@ -13,9 +13,10 @@ from bs4 import BeautifulSoup
 from os import path, makedirs
 
 
-CACHE_DIR = path.expanduser("~/.cache/buttweet")
-WORK_FILE = "work.log"
+CONFIG_DIR = path.expanduser("~/.config/buttweet")
 CONFIG_FILE = "config.yaml"
+WORK_DIR = path.expanduser("~/.cache/buttweet")
+WORK_FILE = "work.log"
 
 
 logger = logging.getLogger(__name__)
@@ -27,48 +28,69 @@ def logging_config(verbose):
         loglevel = logging.WARN
     elif verbose == 2:
         loglevel = logging.INFO
-    elif verbose >= 2:
+    elif verbose >= 3:
         loglevel = logging.DEBUG
 
     logging.basicConfig(
         level=loglevel,
-        format='%(levelname)6s:%(name)20s:%(lineno)3d:%(funcName)10s: %(message)s',
+        format='%(levelname)6s:%(name)10s:%(lineno)3d:%(funcName)15s: %(message)s',
         datefmt="%Y-%m-%d %H:%M:%S", )
 
 
 def get_config():
-    config_path = "{}/{}".format(CACHE_DIR, CONFIG_FILE)
+    config_path = CONFIG_DIR + "/" + CONFIG_FILE
+    config = {
+        "player_id": 0,
+        "plus": True,
+        "daily_tweet_format": "",
+        "summary_tweet_format": "",
+        "twitter": {
+            "consumer_key": "myJRsoneDPkX6WRIOneVq8Xun",
+            "consumer_sec": "YpJU2DT8jxMzcMXalpB8uc9GVT81Wock3AOWpqo8MLZNJ7rBwR",
+            "access_key": "",
+            "access_sec": ""
+        }
+    }
     if not path.exists(config_path):
-        logger.info("{} not found, making default config file.".format(config_path))
+        logger.debug("{} not found, making default config file.".format(config_path))
         # デフォルトの設定を作成する
-        if not path.exists(CACHE_DIR):
-            makedirs(CACHE_DIR, exist_ok=True)  # make ~/.cache/, ~/.cache/buttweet/
+        if not path.exists(CONFIG_DIR):
+            makedirs(CONFIG_DIR, exist_ok=True)  # make ~/.cache/, ~/.cache/buttweet/
         with open(config_path, 'w') as f:
             default_text = '''# User's ID, check https://greedbutt.com/player/<player-id>
 player_id: 0
 # if true, use AB+'s daily run data
 plus: true
+# for formatting, see README.md
+succeed_daily_tweet_format: "TBoI:R、{now.year}年{now.month}月{now.day}日のデイリーランは{play_data[1]} Pointsで暫定{play_data[2]}位(上位{play_data[3]}%)でした。{play_time[0]}時間{play_time[1]}分{play_time[2]}秒でクリア。"
+fail_daily_tweet_format: "TBoI:R、{now.year}年{now.month}月{now.day}日のデイリーランは{play_data[1]} Pointsで暫定{play_data[2]}位(上位{play_data[3]}%)でした。クリアできず。"
+succeed_summary_tweet_format: ""
+fail_summary_tweet_format: ""
+# dry_runをtrueにすると、投稿を行わずに標準出力を行う
+dry_run: false
 twitter:
     consumer_key: "myJRsoneDPkX6WRIOneVq8Xun"
     consumer_sec: "YpJU2DT8jxMzcMXalpB8uc9GVT81Wock3AOWpqo8MLZNJ7rBwR"
     access_key: ""
-    acccess_sec: ""
-    tweet_format = ""
+    access_sec: ""
 '''
             f.write(default_text)
     with open(config_path, 'r') as f:
         data = yaml.load(f)
-    return data
+    config.update(data)
+    return config
 
 
 def set_config(config):
-    config_path = "{}/{}".format(CACHE_DIR, CONFIG_FILE)
+    config_path = CONFIG_DIR + "/" + CONFIG_FILE
+    if not path.exists(CONFIG_DIR):
+        makedirs(CONFIG_DIR, exist_ok=True)
     with open(config_path, 'w') as f:
         f.write(yaml.dump(config))
 
 
 def get_worklog():
-    log_path = "{}/{}".format(CACHE_DIR, WORK_FILE)
+    log_path = WORK_DIR + "/" + WORK_FILE
     if path.exists(log_path):
         with open(log_path, 'r') as f:
             data = yaml.load(f)
@@ -78,7 +100,9 @@ def get_worklog():
 
 
 def set_worklog(worklog):
-    log_path = "{}/{}".format(CACHE_DIR, WORK_FILE)
+    log_path = WORK_DIR + "/" + WORK_FILE
+    if not path.exists(WORK_DIR):
+        makedirs(CONFIG_DIR, exsist_ok=True)
     with open(log_path, 'w') as f:
         f.write(yaml.dump(worklog))
 
@@ -98,7 +122,6 @@ def get_playlog(player_id, plus):
     for i in history[1:]:
         cols = i.find_all('td')
         row = [col.text.strip() for col in cols]
-
         # [プレイ日, 得点, 得点ランク, 得点ランク(パーセント), プレイ時間, プレイ時間順位, プレイ時間順位(パーセント)]
         daily = [
             datetime.datetime.strptime(row[0], '%Y-%m-%d').date(),
@@ -121,7 +144,7 @@ def get_playlog(player_id, plus):
             ]
         playlog.append(daily)
 
-    logger.info("fetched {} data".format(len(playlog)))
+    logger.info("Fetched {} data".format(len(playlog)))
     return playlog
 
 
@@ -139,35 +162,78 @@ def twitter_authorize(ck, cs):
 
 
 def daily_tweet(playlog, auth, config):
-    api = tweepy.API(auth)
-    
-    logger.critical("tweeting but not implemented:"+str(playlog[0]))
+    pl = playlog[0]             # 最新
+    td = pl[4]
+    worklog = get_worklog()
+    last_date = worklog.get("last_daily_tweet_date")
+    latest_play_date = pl[0]
+    if last_date and datetime.datetime.strptime(last_date, '%Y-%m-%d').date() <= latest_play_date:
+        # 最後に投稿された日付から更新されていない
+        logger.info("Nothing new. 最終投稿:{last_date}、最新プレイ日:{latest_play_date}".format(
+            last_date=last_date, latest_play_date=latest_play_date
+        ))
+        return None
+    tmpl = config["succeed_daily_tweet_format"] if len(pl) == 6 else config["fail_daily_tweet_format"]
+    tweet_text = tmpl.format(
+        now=datetime.datetime.now(),
+        last_date=last_date,
+        play_data=pl,
+        play_time=(td.seconds//3600, (td.seconds//60)%60, td.seconds%60)
+    )
+    if not config["dry_run"]:
+        api = tweepy.API(auth)
+        result = api.update_status(tweet_text)
+        worklog["last_daily_tweet_date"] = latest_play_date.strftime("%Y-%m-%d")
+    else:
+        print(tweet_text)
+        result = None
+
+    if result:
+        set_worklog(worklog)
+    return result
 
 
 def summary_tweet(playlog, days, auth, config):
-    logger.warn("Not implemented")
-    pass
+    pls = playlog[:days]        # days日分
+    worklog = get_worklog()
+    logger.critical("Not implemented.")
+    return None
 
 
 @click.command()
-@click.option("--player-id", type=int, help='"https://greedbutt.com/player/<player-id>"←の<player-id>部分。')
-@click.option("--plus", is_flag=True, help="このオプションを指定するとAB+版のデータを取得するようになる。")
-@click.option("--summary", type=int, help="指定した回数分の記録をまとめて投稿する。")
+@click.option("--player-id", type=int, help='"https://greedbutt.com/player/<player-id>"←の<player-id>部分。指定しなければ設定の値が優先される。')
+@click.option("--plus", is_flag=True, help="このオプションを指定するとAB+版のデータを取得するようになる。指定しなければ設定の値が優先される。")
+@click.option("--summary", type=int, help="指定した回数分の記録をまとめて投稿する。未実装。")
 @click.option("--twitter-auth", is_flag=True, help="Twitterへの認証を行う。")
+@click.option("--force", is_flag=True, help="前回実行時の結果に関わらず投稿する。--daemonとの併用は不可能。")
+@click.option("--daemon", "-d", is_flag=True, help="ページを定期的に取得し、更新があったら投稿する。--summaryが指定されている場合、その日数分溜まったら投稿する。--forceとの併用は不可能(無限に投稿してしまうので)。")
+@click.option("--dry-run", is_flag=True, help="このオプションを指定した場合、投稿をせずに標準出力への出力を行う")
 @click.option("--verbose", "-v", count=True, help="ログレベルを指定する。")
-def main(player_id, plus, summary, twitter_auth, verbose):
+def main(player_id, plus, summary, twitter_auth, force, daemon, dry_run, verbose):
     """greedbutt.comのデータを取得してツイートする
-    各オプションは指定しなければ~/.cache/buttweet/config.yamlの値が優先される。
     """
     logging_config(verbose)
+    if daemon and force:
+        raise ValueError("Both daemon and force was specified; it will cause infinite tweeting.")
 
-    config = get_config()
+    config = get_config()       # 設定を読み込む
     logger.info(config)
-
-    last_date = config.get("last_date")
     player_id = player_id or config.get("player_id")
-    twitter = config.get("twitter")
+    if not player_id:
+        raise ValueError("Player ID not set, use config or argument(see --help)")
+    else:
+        config["player_id"] = player_id  # 指定されていたら上書きしておく
+    plus = plus or config.get("config")
+    config["plus"] = plus       # 同上
+    if dry_run:
+        config["dry_run"] = True
 
+    # GreedButt.comからの取得を行う
+    playlog = get_playlog(player_id, plus)
+    logger.debug(playlog[0])
+
+    # Twitter認証を行う
+    twitter = config.get("twitter")
     if twitter_auth:
         access_key, access_sec = twitter_authorize(twitter["consumer_key"], twitter["consumer_sec"])
         config["twitter"]["access_key"] = access_key
@@ -175,21 +241,21 @@ def main(player_id, plus, summary, twitter_auth, verbose):
         set_config(config)
         sys.exit(0)
 
-    plus = plus or config.get("config")
-
-    if not player_id:
-        raise ValueError("Player ID not set, use config or argument(see --help)")
-
-    playlog = get_playlog(player_id, plus)
-    logger.info(playlog[0])
-
     auth = tweepy.OAuthHandler(twitter["consumer_key"], twitter["consumer_sec"])
     auth.set_access_token(twitter["access_key"], twitter["access_sec"])
-    if summary:
-        summary_tweet(playlog, summary, auth, config)
-    else:
-        daily_tweet(playlog, twitter, config)
-
+    while True:
+        # まず投稿できるかやってみる
+        if summary:
+            result = summary_tweet(playlog, summary, auth, config)
+        else:
+            result = daily_tweet(playlog, twitter, config)
+        # そして、
+        if daemon:              # デーモン動作なら
+            sleep_time = 60*60*2 if summary else 60*20  # サマリーなら2時間に一度、さもなくば20分に一度
+            time.sleep(sleep_time)
+            playlog = get_playlog(player_id, plus)  # 確認する
+        else:                   # さもなくば、
+            break               # そのまま終了する
 
 if __name__ == "__main__":
     main()
