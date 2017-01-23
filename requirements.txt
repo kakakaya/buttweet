@@ -1,0 +1,12 @@
+beautifulsoup4==4.5.3
+bs4==0.0.1
+click==6.7
+DateTime==4.1.1
+oauthlib==2.0.1
+pytz==2016.10
+PyYAML==3.12
+requests==2.12.5
+requests-oauthlib==0.7.0
+six==1.10.0
+tweepy==3.5.0
+zope.interface==4.3.3
