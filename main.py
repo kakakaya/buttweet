@@ -187,7 +187,7 @@ def daily_tweet(playlog, auth, config):
     if not config["dry_run"]:
         api = tweepy.API(auth)
         result = api.update_status(tweet_text)
-        worklog["last_daily_tweet_date"] = latest_play_date.strftime("%Y-%m-%d")
+        worklog["last_daily_tweet_date"] = last_date.strftime("%Y-%m-%d")
     else:
         print(tweet_text)
         result = None
