@@ -101,7 +101,7 @@ def get_worklog():
 def set_worklog(worklog):
     log_path = WORK_DIR + "/" + WORK_FILE
     if not path.exists(WORK_DIR):
-        makedirs(CONFIG_DIR, exist_ok=True)
+        makedirs(WORK_DIR, exist_ok=True)
     with open(log_path, 'w') as f:
         f.write(yaml.dump(worklog, allow_unicode=True))
 
