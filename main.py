@@ -225,6 +225,22 @@ def main(player_id, plus, summary, twitter_auth, force, daemon, dry_run, verbose
 
     config = get_config()       # 設定を読み込む
     logger.debug(config)
+
+    # Twitter認証を行う
+    twitter = config.get("twitter")
+
+    if twitter_auth:
+        access_key, access_sec = twitter_authorize(twitter["consumer_key"], twitter["consumer_sec"])
+        config["twitter"]["access_key"] = access_key
+        config["twitter"]["access_sec"] = access_sec
+        # この流れの場合のみ、configを汚染(dry_run、plus、player_idの上書き)をしていないのでset_configが使える
+        set_config(config)
+        sys.exit(0)
+    else:
+        auth = tweepy.OAuthHandler(twitter["consumer_key"], twitter["consumer_sec"])
+        auth.set_access_token(twitter["access_key"], twitter["access_sec"])
+
+
     player_id = player_id or config.get("player_id")
     if not player_id:
         raise ValueError("Player ID not set, use config or argument(see --help)")
@@ -239,17 +255,6 @@ def main(player_id, plus, summary, twitter_auth, force, daemon, dry_run, verbose
     playlog = get_playlog(player_id, plus)
     logger.debug(playlog)
 
-    # Twitter認証を行う
-    twitter = config.get("twitter")
-    if twitter_auth:
-        access_key, access_sec = twitter_authorize(twitter["consumer_key"], twitter["consumer_sec"])
-        config["twitter"]["access_key"] = access_key
-        config["twitter"]["access_sec"] = access_sec
-        set_config(config)
-        sys.exit(0)
-
-    auth = tweepy.OAuthHandler(twitter["consumer_key"], twitter["consumer_sec"])
-    auth.set_access_token(twitter["access_key"], twitter["access_sec"])
     while True:
         # まず投稿できるかやってみる
         if summary:
