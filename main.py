@@ -85,7 +85,7 @@ def set_config(config):
     if not path.exists(CONFIG_DIR):
         makedirs(CONFIG_DIR, exist_ok=True)
     with open(config_path, 'w') as f:
-        f.write(yaml.dump(config))
+        f.write(yaml.dump(config, allow_unicode=True))
 
 
 def get_worklog():
@@ -103,7 +103,7 @@ def set_worklog(worklog):
     if not path.exists(WORK_DIR):
         makedirs(CONFIG_DIR, exsist_ok=True)
     with open(log_path, 'w') as f:
-        f.write(yaml.dump(worklog))
+        f.write(yaml.dump(worklog, allow_unicode=True))
 
 
 def get_playlog(player_id, plus):
