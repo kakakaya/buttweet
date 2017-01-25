@@ -146,7 +146,9 @@ def get_playlog(player_id, plus):
         playlog.append(daily)
 
     logger.info(
-        "Fetched {} data, latest: {}".format(len(playlog), playlog[0][0]))
+        "{}: Fetched {} data, latest: {}".format(
+            datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'), len(playlog), playlog[0][0])
+    )
     return playlog
 
 
@@ -165,6 +167,9 @@ def twitter_authorize(ck, cs):
 
 def daily_tweet(playlog, auth, config):
     pl = playlog[0]  # 最新
+    if len(pl) < 4:
+        # 取得エラー
+        logger.warn("Odd latest playlog: {}".format(pl))
     td = pl[4]
     worklog = get_worklog()
 
