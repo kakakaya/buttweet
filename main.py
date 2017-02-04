@@ -182,7 +182,7 @@ def daily_tweet(playlog, auth, config):
     # GreedButt.comから取得したなかで最新の日付
     latest_play_date = pl[0]
 
-    if last_tweeted_date and last_tweeted_date == latest_play_date:
+    if last_tweeted_date and last_tweeted_date >= latest_play_date:
         # 最後に投稿された日付から更新されていない
         logger.info("Nothing new. 最終投稿:{last_tweeted_date}、最新プレイ日:{latest_play_date}".format(
             last_tweeted_date=last_tweeted_date,
