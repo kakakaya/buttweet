@@ -167,9 +167,10 @@ def twitter_authorize(ck, cs):
 
 def daily_tweet(playlog, auth, config):
     pl = playlog[0]  # 最新
-    if len(pl) < 4:
-        # 取得エラー
+    if len(pl) < 5:
+        # 取得エラー、抜けておく
         logger.warn("Odd latest playlog: {}".format(pl))
+        return None
     td = pl[4]
     worklog = get_worklog()
 
